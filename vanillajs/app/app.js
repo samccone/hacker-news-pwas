@@ -5,41 +5,68 @@ const STORY_MATCHER = /story\/(\d+$)/;
 
 const windowExists = typeof window !== 'undefined';
 const documentExists = typeof document !== 'undefined';
+const a = 'appendChild';
 
 if (documentExists) {
-  app = document.querySelector('#app');
-  document.body.addEventListener('click', (e) => {
+  app = document.querySelector('#a');
+  document.onclick = (e) => {
     const t = e.target;
-    if (t.classList.contains('page')) {
-      e.preventDefault();
-      history.pushState({offset: 0}, '', `${t.getAttribute('href')}`);
-      fetchAndShow(app, t.dataset.scope);
-    }
 
-    if (t.classList.contains('comments')) {
+    if (t.dataset.scope || t.href && t.href.match(STORY_MATCHER)) {
       e.preventDefault();
-      const storyId = t.href.match(STORY_MATCHER)[1];
-      history.pushState({storyId}, '', `/story/${storyId}`);
-      renderDetail(storyId);
+      const storyId = (t.href.match(STORY_MATCHER) || [])[1];
+      history.pushState(storyId ? { storyId } : 0, '', storyId ? `/story/${storyId}` : t.href);
+      f(storyId)
     }
-  });
+  }
 }
 
-function fetchAndShow(shell, scope, offset = 0) {
-  return fetchStories(scope, offset)
-      .then(stories => showStories(shell, stories));
+/**
+ * 
+ * @param {string} storyId 
+ */
+function f(storyId) {
+  if (storyId != null) {
+    renderDetail(storyId);
+  } else {
+    let match = matchPath(SECTION_MATCHER);
+    fetchAndShow(app, (match[0] === '/' ? 'top' : match[0]) + 'stories');
+  }
+}
+
+if (windowExists) {
+  window.onpopstate = e => {
+    f((e.state || 0).storyId);
+  };
+
+  const match = matchPath(SECTION_MATCHER);
+  let storyId = matchPath(STORY_MATCHER)
+  if (match) {
+    let url = match[0] === '/' ? 'top' : match[0];
+    history.replaceState(0, '', '/' + url);
+  } else {
+    storyId = storyId[1]
+    history.pushState({ storyId }, '', `/story/${storyId}`);
+  }
+
+  f(storyId);
+}
+
+async function json(url) {
+  return await (await fetch(url)).json();
+}
+
+async function fetchAndShow(shell, scope) {
+  const r = await json(`/stories.json?scope=${scope}&offset=0&num=30`);
+  showStories(shell, r);
 }
 
 function showStories(appShell, stories) {
   appShell.innerHTML = '';
   _createElm = _createElm.bind(this);
-  appShell.appendChild(stories.reduce(
-      (list, story) => list.appendChild(renderStory(story)) && list,
-      _createElm('ul', {id: 'stories'})));
-}
-
-function fetchJson(url, query = '') {
-  return fetch(`${url}.json${query}`).then(v => v.json());
+  appShell[a](stories.reduce(
+    (list, story) => list[a](renderStory(story)) && list,
+    _createElm('ul', { id: 'stories' })));
 }
 
 /**
@@ -49,15 +76,15 @@ function fetchJson(url, query = '') {
  */
 function renderCommentsInto(root, recurse, comments) {
   comments.filter(c => !c.deleted).map(renderComment).forEach(comment => {
-    root.appendChild(comment);
+    root[a](comment);
     recurse && fetchChildComments(comment.kids, root);
   });
 }
 
-function fetchChildComments(children, root) {
+async function fetchChildComments(children, root) {
   if (children && children.length) {
-    fetchJson('/items', `?ids=${children.join(',')}`)
-        .then(renderCommentsInto.bind(null, root, true));
+    const comments = await json(`/items.json?ids=${children.join(',')}`);
+    renderCommentsInto(root, true, comments);
   }
 }
 
@@ -66,63 +93,50 @@ function fetchChildComments(children, root) {
 */
 function renderComment(comment) {
   let kidRoot = _createElm(
-      'ul', {className: 'kid-root', 'data-story-id': comment.id},
+    'ul', 0,
+    _createElm(
+      'li', 0, _createElm(
+        'd', 0,
+        _createElm('d', 0, comment.by)),
       _createElm(
-          'li', {}, _createElm(
-                        'div', {className: 'comment-info sub-info'},
-                        _createElm('div', {className: 'author'}, comment.by)),
-          _createElm(
-              'p', {className: 'comment-text', innerHTML: comment.text})));
+        'p', { innerHTML: comment.text })));
 
   fetchChildComments(comment.kids, kidRoot);
 
   return kidRoot;
 }
 
-function renderDetail(storyId) {
+async function renderDetail(storyId) {
   // Empty the app DOM
   app.innerHTML = '';
 
-  fetchJson(API_BASE + `/item/${storyId}`).then(story => {
-    const storyRoot = _createElm(
-        'div', {className: 'story-root'}, renderStory(story, 'div', true));
-    app.appendChild(storyRoot);
+  const story= await json(API_BASE + `/item/${storyId}.json`);
+  const storyRoot = _createElm(
+    'd', 0, renderStory(story, 'd', true));
+  app[a](storyRoot);
 
-    fetchJson('/items', `?ids=${story.kids.join(',')}`).then(kids => {
-      const root = _createElm('ul', {className: 'root'});
-      renderCommentsInto(root, false, kids);
-      storyRoot.appendChild(root);
-    });
-  });
-}
-
-function fetchStories(scope, offset = 0, num = 30) {
-  return new Promise((res) => {
-    var oReq = new XMLHttpRequest();
-    oReq.addEventListener('load', function(v) {
-      res(JSON.parse(this.responseText));
-    });
-    oReq.open(
-        'GET', `/stories.json?scope=${scope}&offset=${offset}&num=${num}`);
-    oReq.send();
-  });
+  const kids = await json(`/items.json?ids=${story.kids.join(',')}`);
+  const root = _createElm('ul', 0);
+  renderCommentsInto(root, false, kids);
+  storyRoot[a](root);
 }
 
 /**
  * @param {string} tagName
- * @param {DomAttrs} attrs
+ * @param {DomAttrs|number} attrs
  * @param {...*} var_args
  */
-function _createElm(tagName, attrs = {}, var_args) {
-  const elm = this.document.createElement(tagName);
+function _createElm(tagName, attrs = 0, var_args) {
+  const d = (documentExists ? document :  this.document); 
+  const elm = d.createElement(tagName);
 
   for (let k in attrs) {
     elm[k] = attrs[k];
   }
 
-  Array.from(arguments).slice(2).forEach(
-      n => elm.appendChild(
-          typeof n === 'string' ? this.document.createTextNode(n || '') : n));
+  [...arguments].slice(2).forEach(
+    n => elm[a](
+      typeof n === 'string' ? d.createTextNode(n || '') : n));
 
   return elm;
 }
@@ -134,60 +148,36 @@ function _createElm(tagName, attrs = {}, var_args) {
  */
 function renderStory(story, rootTag = 'li', withText = false) {
   return _createElm(
-      rootTag, {className: 'story'},
+    rootTag, 0,
+    _createElm(
+      'd', 0,
       _createElm(
-          'div', {className: 'headline'},
+        'd', { hidden: story.idx === undefined }, `${story.idx + 1}.`),
+      _createElm(
+        'd', 0,
+        _createElm(
+          'a',
+          { href: story.url || `/story/${story.id}` },
+          story.title),
+        _createElm(
+          'd', 0,
+          _createElm('d', 0, `${story.score} points |`),
+          _createElm('d', 0, `by ${story.by} |`),
           _createElm(
-              'div', {hidden: story.idx === undefined}, `${story.idx + 1}.`),
-          _createElm(
-              'div', {},
-              _createElm(
-                  'a',
-                  {href: story.url || `/story/${story.id}`, className: 'title'},
-                  story.title),
-              _createElm(
-                  'div', {className: 'sub-info'},
-                  _createElm('div', {}, `${story.score} points |`),
-                  _createElm('div', {}, `by ${story.by} |`),
-                  _createElm(
-                      'a', {
-                        className: 'comments',
-                        href: `/story/${story.id}`,
-                        // Some stories have no descendants.
-                        hidden: story.descendants === undefined,
-                      },
-                      `${story.descendants} comments`)))),
-      _createElm('div', {
-        className: 'story-text',
-        innerHTML: story.text,
-        hidden: !(withText && story.text !== undefined)
-      }));
+            'a', {
+            href: `/story/${story.id}`,
+            // Some stories have no descendants.
+            hidden: story.descendants === undefined,
+          },
+            `${story.descendants} comments`)))),
+    _createElm('d', {
+      innerHTML: story.text,
+      hidden: !(withText && story.text !== undefined)
+    }));
 }
 
 function matchPath(matcher) {
   return window.location.pathname.match(matcher);
-}
-
-if (windowExists) {
-  window.onpopstate = e => {
-    if (e.state.offset !== undefined) {
-      let match = matchPath(SECTION_MATCHER);
-      fetchAndShow(app, (match[0] === '/' ? 'top' : match[0]) + 'stories');
-    } else {
-      renderDetail(e.state.storyId);
-    }
-  };
-
-  let match = matchPath(SECTION_MATCHER);
-  if (match) {
-    let url = match[0] === '/' ? 'top' : match[0];
-    history.replaceState({offset: 0}, '', '/' + url);
-    fetchAndShow(app, `${url}stories`);
-  } else {
-    const storyId = matchPath(STORY_MATCHER)[1]
-    history.pushState({storyId}, '', `/story/${storyId}`);
-    renderDetail(storyId);
-  }
 }
 
 if (typeof module !== 'undefined') {

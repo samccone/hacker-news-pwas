@@ -5,7 +5,7 @@
 var Story;
 
 /**
- * @typedef {{by: string, deleted: boolean, id: number, parent: number, time: number, type:
+ * @typedef {{kids: Array<number>, by: string, deleted: boolean, id: number, parent: number, time: number, type:
  * string}}
  */
 var StoryComment;

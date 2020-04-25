@@ -55,7 +55,7 @@ app.get("/items.json", (req, res) => {
 
 function renderRoot(req, res, scope = "topstories") {
   jsdom.env(renderIndex(), (err, window) => {
-    const app = window.document.querySelector("#app");
+    const app = window.document.querySelector("#a");
 
     fetchStories(scope, 0, 30)
       .then(stories => {
@@ -79,12 +79,12 @@ function getScopeFromPath(path) {
 }
 
 app.get("*", (req, res) => {
-  let linkHeaders = ["</app.js>; rel=preload; as=script"];
+  let linkHeaders = ["</cc.js>; rel=preload; as=script"];
 
   if (req.path.match(SECTION_MATCHER)) {
     const scope = getScopeFromPath(req.path);
     linkHeaders.push(
-      `</stories.json?scope=${scope}&offset=0&num=30>; rel=preload`
+      `</stories.json?scope=${scope}&offset=0&num=30>; crossorigin; rel=preload; as=fetch')`
     );
     res.header("link", linkHeaders);
     renderRoot(req, res, scope);
